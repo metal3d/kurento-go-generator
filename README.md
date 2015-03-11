@@ -10,6 +10,12 @@ Please **do not use this package as a standard go installed command**
 
 Because the project is made to build a package from git submodules, it's recommanded to install sources in separated directory.
 
+
+You need to install Go, make and goimports
+
+- [http://golang.org](Go)
+- [http://godoc.org/golang.org/x/tools/cmd/goimports](GoImports)
+
 Just do:
 
     mkdir ~/src/
