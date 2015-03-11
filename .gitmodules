@@ -1,0 +1,6 @@
+[submodule "kms-core"]
+	path = kms-core
+	url = git@github.com:Kurento/kms-core.git
+[submodule "kms-elements"]
+	path = kms-elements
+	url = git@github.com:Kurento/kms-elements.git
