@@ -1,12 +1,14 @@
 Kurento package generator
 =========================
 
-This project is *not* the kurento package (that will be created soon). This software is built to generate kurento package for Go/Golang from JSON definitions that are provided for this purpose.
+This project is **not** the kurento package (that will be created soon). This software is built to generate kurento package for Go/Golang from JSON definitions that are provided for this purpose.
 
 Preparation
 -----------
 
-Please *do not use this package as a standard go installed command* Because the project is made to build a package from git submodules, it's recommanded to install sources in separated directory.
+Please **do not use this package as a standard go installed command**
+
+Because the project is made to build a package from git submodules, it's recommanded to install sources in separated directory.
 
 Just do:
 
