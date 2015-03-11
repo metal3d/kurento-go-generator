@@ -54,9 +54,9 @@ func (elem *{{$name}}) {{ .Name | title }}({{ range $i, $e := .Params }}{{ if $i
 	req := elem.getInvokeRequest()
 	req["params"] = map[string]interface{}{
 		"operation" : "{{ .Name }}",
-		{{ if .Params }}
-		"operationParams" : map[string]interface{}{
-			{{ range .Params }} "{{.name }}" : {{.name}},
+		"object"	: elem.id,{{ if .Params }}
+		"operationParams" : map[string]string{
+			{{ range .Params }} "{{.name }}" : fmt.Sprintf("%s", {{.name}} ),
 			{{ end }}
 		},
 		{{ end }}
@@ -82,6 +82,10 @@ type {{ .Name }} struct {
 	{{ end }}
 }
 {{ end }}
+`
+
+const packageTempalte = `package kurento
+{{ .Content }}
 `
 
 var re = regexp.MustCompile(`(.+)\[\]`)
@@ -170,7 +174,9 @@ func getModel(path string) core {
 	i := core{}
 	data, _ := ioutil.ReadFile(path)
 	err := json.Unmarshal(data, &i)
-	log.Println(err)
+	if err != nil {
+		log.Fatal(err)
+	}
 	return i
 }
 
@@ -191,7 +197,7 @@ func parse(c []class) []string {
 	ret := make([]string, len(c))
 	for idx, cl := range c {
 
-		log.Println("Generating ", idx, cl.Name)
+		log.Println("Generating ", cl.Name)
 		// rewrite types
 		for j, p := range cl.Properties {
 			p = formatTypes(p)
@@ -225,7 +231,7 @@ func parse(c []class) []string {
 		}
 		for j, p := range cl.Constructor.Params {
 			p := formatTypes(p)
-			log.Println(p)
+			//log.Println(p)
 			cl.Constructor.Params[j] = p
 		}
 
@@ -273,8 +279,12 @@ func parseComplexTypes() {
 
 func writeFile(path string, classes []string) {
 	content := strings.Join(classes, "\n")
-	content = "package kurento\n" + content
-	ioutil.WriteFile(path, []byte(content), os.ModePerm)
+	tpl, _ := template.New("package").Parse(packageTempalte)
+	buff := bytes.NewBufferString("")
+	tpl.Execute(buff, map[string]string{
+		"Content": content,
+	})
+	ioutil.WriteFile(path, buff.Bytes(), os.ModePerm)
 }
 
 func main() {

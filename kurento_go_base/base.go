@@ -61,6 +61,11 @@ func (m *MediaObject) getInvokeRequest() map[string]interface{} {
 	return req
 }
 
+// String implement Stringer interface, return ID
+func (m *MediaObject) String() string {
+	return m.id
+}
+
 // Return name of the object
 func getMediaElementType(i interface{}) string {
 	n := reflect.TypeOf(i).String()

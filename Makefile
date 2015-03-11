@@ -2,7 +2,6 @@
 
 all: clean prep build format
 
-
 clean:
 	rm -rf kurento
 
@@ -11,7 +10,12 @@ prep:
 
 build:
 	go run main.go
+	# Because I don't find os.ModeXXX to use when I create files...
+	chmod -R a-x kurento/*.go
 
 format:
 	cp kurento_go_base/*_test.go kurento/
-	go fmt ./kurento
+	goimports -w ./kurento
+
+test:
+	cd kurento && go test -v
