@@ -8,10 +8,17 @@ import (
 	"golang.org/x/net/websocket"
 )
 
-// IMadiaElement implements some basic methods as getContructorParams or Create()
+// IMadiaElement implements some basic methods as getConstructorParams or Create()
 type IMediaObject interface {
-	getConstructorParams(IMediaObject) map[string]interface{}
-	Create(IMediaObject)
+
+	// Return the constructor parameters
+	getConstructorParams(IMediaObject, map[string]interface{}) map[string]interface{}
+
+	// Each media object should be able to create another object
+	// Those options are sent to getConstructorParams
+	Create(IMediaObject, map[string]interface{})
+
+	// Return the value of a given field
 	getField(name string) interface{}
 }
 
@@ -34,10 +41,21 @@ func GetClient(uri string) (*ServerClient, error) {
 	return kurentoclients[uri], err
 }
 
+// Create object "m" with given "options"
+func (elem *MediaObject) Create(m IMediaObject, options map[string]interface{}) {
+	req := elem.getCreateRequest()
+	req["type"] = getMediaElementType(m)
+	params := m.getConstructorParams(elem, options)
+	req["constructorParameters"] = params
+	if debug {
+		log(req)
+	}
+}
+
 func (m *MediaObject) getField(name string) interface{} {
-	val := reflect.ValueOf(name).FieldByName(name)
+	val := reflect.ValueOf(m).FieldByName(name)
 	if val.IsValid() {
-		return val
+		return val.String()
 	}
 	return nil
 }
@@ -78,5 +96,11 @@ var debug = false
 func log(i interface{}) {
 	if debug {
 		LOG.Println(i)
+	}
+}
+
+func mergeOptions(a, b map[string]interface{}) {
+	for key, val := range b {
+		a[key] = val
 	}
 }

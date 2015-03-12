@@ -23,28 +23,22 @@ type {{ .Name }} struct {
 	{{ end }}
 }
 
-{{ if eq .Name "MediaObject" }}
-// Create object
-func (elem *MediaObject) Create(m IMediaObject) {
-	req := elem.getCreateRequest()
-	req["type"] = getMediaElementType(m)
-	params := m.getConstructorParams(m)
-	req["constructorParameters"] = params
-	if debug {
-		log(req)
-	}
-}
-{{ end}}
 
 // Return contructor params to be called by "Create"
-func (elem *{{.Name}}) getConstructorParams(from IMediaObject) map[string]interface{} {
+func (elem *{{.Name}}) getConstructorParams(from IMediaObject, options map[string]interface{}) map[string]interface{} {
 	{{ if len .Constructor.Params }}
-	return map[string]interface{} {
+	// Create basic constructor params
+	ret := map[string]interface{} {
 		{{ range .Constructor.Params }}{{ if eq .type "string" "boolean" "int" }}"{{ .name }}" : {{ .defaultValue }},
-			{{ else }}"{{ .name }}" : from.getField("{{ .name }}"),
+			{{ else }}"{{ .name }}" : fmt.Sprintf("%s", from), //elem.getField("{{ .name }}"),
 			{{ end }}{{ end }}
 	}
-	{{ else }}return nil
+
+	// then merge options
+	mergeOptions(ret, options)
+
+	return ret
+	{{ else }}return options
 	{{ end }}
 }
 
