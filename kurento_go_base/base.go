@@ -4,8 +4,6 @@ import (
 	LOG "log"
 	"reflect"
 	"strings"
-
-	"golang.org/x/net/websocket"
 )
 
 // IMadiaElement implements some basic methods as getConstructorParams or Create()
@@ -18,56 +16,41 @@ type IMediaObject interface {
 	// Those options are sent to getConstructorParams
 	Create(IMediaObject, map[string]interface{})
 
-	// Return the value of a given field
-	getField(name string) interface{}
-}
-
-var kurentoclients = make(map[string]*ServerClient)
-var currClientID int64
-
-type ServerClient struct {
-	MediaObject
-	ws *websocket.Conn
-}
-
-func GetClient(uri string) (*ServerClient, error) {
-	var err error
-	if kurentoclients[uri] == nil {
-		s := ServerClient{}
-		s.ws, err = websocket.Dial(uri, "", "http://127.0.0.1:8080")
-		kurentoclients[uri] = &s
-	}
-
-	return kurentoclients[uri], err
+	// Set ID of the element
+	setId(string)
 }
 
 // Create object "m" with given "options"
 func (elem *MediaObject) Create(m IMediaObject, options map[string]interface{}) {
 	req := elem.getCreateRequest()
-	req["type"] = getMediaElementType(m)
-	params := m.getConstructorParams(elem, options)
-	req["constructorParameters"] = params
+	constparams := m.getConstructorParams(elem, options)
+	// TODO params["sessionId"]
+	req["params"] = map[string]interface{}{
+		"type":              getMediaElementType(m),
+		"constructorParams": constparams,
+	}
 	if debug {
+		log("request to be sent: ")
 		log(req)
+	}
+	res := <-requestKMS(req)
+	if res.Result["value"] != "" {
+		m.setId(res.Result["value"])
 	}
 }
 
-func (m *MediaObject) getField(name string) interface{} {
-	val := reflect.ValueOf(m).FieldByName(name)
-	if val.IsValid() {
-		return val.String()
-	}
-	return nil
+// setId set object id from a KMS response
+func (m *MediaObject) setId(id string) {
+	m.Id = id
 }
 
 // Build a prepared create request
 func (m *MediaObject) getCreateRequest() map[string]interface{} {
-	currClientID++
 
 	return map[string]interface{}{
 		"jsonrpc": "2.0",
-		"id":      currClientID,
 		"method":  "create",
+		"params":  make(map[string]interface{}),
 	}
 }
 
@@ -81,7 +64,15 @@ func (m *MediaObject) getInvokeRequest() map[string]interface{} {
 
 // String implement Stringer interface, return ID
 func (m *MediaObject) String() string {
-	return m.id
+	return m.Id
+}
+
+// NewMediaPipeline creation
+func NewMediaPipeline() *MediaPipeline {
+	m := &MediaObject{}
+	ret := &MediaPipeline{}
+	m.Create(ret, nil)
+	return ret
 }
 
 // Return name of the object

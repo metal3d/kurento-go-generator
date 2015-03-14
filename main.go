@@ -13,18 +13,19 @@ import (
 )
 
 const strTemplate = `
+{{ define "Arguments" }}{{ range $i, $e := .Params }}{{ if $i }}, {{ end }} {{ $e.name }} {{ $e.type}}{{ end }}{{ end }}
 {{ $name := .Name}}
 {{ .Doc }}
 type {{ .Name }} struct {
 	{{ .Extends }}
 	{{ range .Properties }}
 	{{ .doc }}
-	{{ .name }} {{ .type }}
+	{{ .name | title }} {{ .type }}
 	{{ end }}
 }
 
 
-// Return contructor params to be called by "Create"
+// Return contructor params to be called by "Create".
 func (elem *{{.Name}}) getConstructorParams(from IMediaObject, options map[string]interface{}) map[string]interface{} {
 	{{ if len .Constructor.Params }}
 	// Create basic constructor params
@@ -43,18 +44,34 @@ func (elem *{{.Name}}) getConstructorParams(from IMediaObject, options map[strin
 }
 
 {{ range .Methods }}
-{{ .Doc }}
-func (elem *{{$name}}) {{ .Name | title }}({{ range $i, $e := .Params }}{{ if $i }}, {{ end }} {{ $e.name }} {{ $e.type}}{{ end }}) {
+{{ .Doc }}{{ if .Return.doc }}
+// Returns: 
+{{ .Return.doc }}{{ end }}
+func (elem *{{$name}}) {{ .Name | title }}({{ template "Arguments" .}}) ({{if .Return.type }}{{ .Return.type}}, {{ end }} error) {
 	req := elem.getInvokeRequest()
 	req["params"] = map[string]interface{}{
 		"operation" : "{{ .Name }}",
-		"object"	: elem.id,{{ if .Params }}
+		"object"	: elem.Id,{{ if .Params }}
 		"operationParams" : map[string]string{
 			{{ range .Params }} "{{.name }}" : fmt.Sprintf("%s", {{.name}} ),
 			{{ end }}
 		},
 		{{ end }}
 	}
+	// Call server and wait response
+	response := <- requestKMS(req)
+	{{ if .Return}}
+	{{ .Return.doc }}
+		{{ if eq .Return.type "string" "int" "float" "boolean" }}
+	return response.Result["value"], response.Error
+		{{ else }}{{/* More complicated but... let's go */}}
+	ret := {{ .Return.type }}{}
+	return ret, response.Error
+		{{ end }}
+	{{ else }}
+	// Returns error or nil
+	return response.Error
+	{{end}}
 
 }
 {{ end }}
@@ -78,16 +95,28 @@ type {{ .Name }} struct {
 {{ end }}
 `
 
-const packageTempalte = `package kurento
+const packageTemplate = `package kurento
 {{ .Content }}
 `
 
+const DOCLINELENGTH = 79
+
 var re = regexp.MustCompile(`(.+)\[\]`)
 
-type method struct {
+type Return struct {
+	Doc  string
+	Type string
+}
+
+type constructor struct {
 	Name   string
 	Doc    string
 	Params []map[string]interface{}
+}
+
+type method struct {
+	constructor
+	Return map[string]interface{}
 }
 
 type class struct {
@@ -97,7 +126,7 @@ type class struct {
 	Abstract    bool
 	Properties  []map[string]interface{}
 	Events      []string
-	Constructor method
+	Constructor constructor
 	Methods     []method
 }
 
@@ -125,13 +154,49 @@ var funcMap = template.FuncMap{
 	"uppercase": strings.ToUpper,
 }
 
+func formatDoc(doc string) string {
+
+	doc = strings.Replace(doc, ":rom:cls:", "", -1)
+	doc = strings.Replace(doc, ":term:", "", -1)
+	doc = strings.Replace(doc, "``", `"`, -1)
+
+	lines := strings.Split(doc, "\n")
+	part := make([]string, 0)
+	for _, line := range lines {
+		if len(strings.TrimSpace(line)) == 0 {
+			continue
+		}
+		// if line is too long, cut !
+		if len(line) > DOCLINELENGTH {
+			pos := DOCLINELENGTH
+			for len(line) > DOCLINELENGTH {
+				// find previous space
+				for i := pos; line[pos] != ' '; i-- {
+					pos = i
+				}
+				part = append(part, line[:pos])
+				line = line[pos:]
+			}
+		}
+		// then append remaining line
+		part = append(part, line)
+	}
+
+	for i, p := range part {
+		part[i] = "// " + strings.TrimSpace(p)
+	}
+	ret := strings.Join(part, "\n")
+	return ret
+}
+
 func formatTypes(p map[string]interface{}) map[string]interface{} {
-	doc := strings.Split(p["doc"].(string), "\n")
+	/*doc := strings.Split(p["doc"].(string), "\n")
 	for i, d := range doc {
-		doc[i] = "//" + d
+		doc[i] = "// " + d
 	}
 	p["doc"] = strings.Join(doc, "\n")
-
+	*/
+	p["doc"] = formatDoc(p["doc"].(string))
 	if p["type"] == "String[]" {
 		p["type"] = "[]string"
 	}
@@ -214,11 +279,16 @@ func parse(c []class) []string {
 				p := formatTypes(p)
 				m.Params[i] = p
 			}
-			doc := strings.Split(m.Doc, "\n")
-			for i, d := range doc {
-				doc[i] = "//" + d
+			//doc := strings.Split(m.Doc, "\n")
+			//for i, d := range doc {
+			//	doc[i] = "// " + d
+			//}
+			//m.Doc = strings.Join(doc, "\n")
+			m.Doc = formatDoc(m.Doc)
+
+			if m.Return["type"] != nil {
+				m.Return = formatTypes(m.Return)
 			}
-			m.Doc = strings.Join(doc, "\n")
 
 			cl.Methods[j] = m
 
@@ -231,11 +301,12 @@ func parse(c []class) []string {
 
 		tpl, _ := template.New("structure").Funcs(funcMap).Parse(strTemplate)
 		buff := bytes.NewBufferString("")
-		doc := strings.Split(cl.Doc, "\n")
-		for i, d := range doc {
-			doc[i] = "//" + d
-		}
-		cl.Doc = strings.Join(doc, "\n")
+		//doc := strings.Split(cl.Doc, "\n")
+		//for i, d := range doc {
+		//	doc[i] = "// " + d
+		//}
+		//cl.Doc = strings.Join(doc, "\n")
+		cl.Doc = formatDoc(cl.Doc)
 
 		tpl.Execute(buff, cl)
 		ret[idx] = buff.String()
@@ -251,11 +322,12 @@ func parseComplexTypes() {
 		ctypes := getModel(path).ComplexTypes
 		for _, ctype := range ctypes {
 
-			doc := strings.Split(ctype.Doc, "\n")
-			for i, d := range doc {
-				doc[i] = "//" + d
-			}
-			ctype.Doc = strings.Join(doc, "\n")
+			// doc := strings.Split(ctype.Doc, "\n")
+			// for i, d := range doc {
+			// 	doc[i] = "// " + d
+			// }
+			// ctype.Doc = strings.Join(doc, "\n")
+			ctype.Doc = formatDoc(ctype.Doc)
 
 			for i, p := range ctype.Properties {
 				ctype.Properties[i] = formatTypes(p)
@@ -273,7 +345,7 @@ func parseComplexTypes() {
 
 func writeFile(path string, classes []string) {
 	content := strings.Join(classes, "\n")
-	tpl, _ := template.New("package").Parse(packageTempalte)
+	tpl, _ := template.New("package").Parse(packageTemplate)
 	buff := bytes.NewBufferString("")
 	tpl.Execute(buff, map[string]string{
 		"Content": content,

@@ -14,7 +14,7 @@ build:
 	chmod -R a-x kurento/*.go
 
 format:
-	cp kurento_go_base/*_test.go kurento/
+	cp kurento_go_base/*.go kurento/
 	goimports -w ./kurento
 
 test:
