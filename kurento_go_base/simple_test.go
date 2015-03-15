@@ -27,15 +27,24 @@ func init() {
 
 		if req["method"] == "create" {
 			params := req["params"].(map[string]interface{})
-			if params != nil && params["type"].(string) == "WebRtcEndpoint" {
-				cp := params["constructorParams"].(map[string]interface{})
-				response.Result = map[string]string{
-					"value": cp["mediaPipeline"].(string) + "/ID_FOR_WEBRTCENDPOINT",
+			if params != nil {
+				if t, ok := params["type"].(string); ok {
+					if t == "WebRtcEndpoint" {
+						cp := params["constructorParams"].(map[string]interface{})
+						response.Result = map[string]string{
+							"value": cp["mediaPipeline"].(string) + "/ID_FOR_WEBRTCENDPOINT",
+						}
+					}
+					if t == "MediaPipeline" {
+						response.Result = map[string]string{
+							"value": "ID_FOR_MEDIAPIPELINE",
+						}
+					}
 				}
-				// Build a webrtc response
 			}
 		}
 
+		// fake KMS response in a chanel
 		ret := make(chan Response)
 		go func() {
 			ret <- response
@@ -50,7 +59,6 @@ func TestCreateMediaPipeline(t *testing.T) {
 	T = t
 	debug = true
 	pipeline := NewMediaPipeline()
-	pipeline.Id = "uuid_of_mediapipeline"
 	nicePrint(pipeline, t)
 
 }
@@ -60,10 +68,9 @@ func TestWebRtcEndpoint(t *testing.T) {
 	T = t
 	debug = true
 	pipeline := NewMediaPipeline()
-	pipeline.Id = "uuid_of_mediapipeline"
 
 	wrtc := &WebRtcEndpoint{}
-	pipeline.Create(wrtc, map[string]interface{}{"test": "val"})
+	pipeline.Create(wrtc, nil)
 
 	nicePrint(wrtc, t)
 
@@ -74,10 +81,10 @@ func TestConnectWebRTCEndpointSink(t *testing.T) {
 	T = t
 	debug = true
 	pipeline := NewMediaPipeline()
-	pipeline.Id = "uuid_of_mediapipeline"
 
 	wrtc := &WebRtcEndpoint{}
-	pipeline.Create(wrtc, map[string]interface{}{"test": "val"})
+	pipeline.Create(wrtc, nil)
+	nicePrint(wrtc, t)
 
 	wrtc.Connect(wrtc, "", "", "")
 	nicePrint(wrtc, t)
