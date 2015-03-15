@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -13,8 +14,17 @@ import (
 )
 
 const strTemplate = `
-{{ define "Arguments" }}{{ range $i, $e := .Params }}{{ if $i }}, {{ end }} {{ $e.name }} {{ $e.type}}{{ end }}{{ end }}
+{{ define "Arguments" }}{{ range $i, $e := .Params }}{{ if $i }}, {{ end }} {{ $e.name }} {{ $e.type | checkElement }}{{ end }}{{ end }}
 {{ $name := .Name}}
+
+{{/* Generate interface then struct */}}
+{{ if ne .Name "MediaObject" }}
+type I{{ .Name }} interface {
+	{{ range .Methods }}{{.Name | title }}({{ template "Arguments" .}})({{ if .Return.type}}{{.Return.type}},{{end}} error)
+	{{end}}
+}
+{{ end }}
+
 {{ .Doc }}
 type {{ .Name }} struct {
 	{{ .Extends }}
@@ -30,9 +40,9 @@ func (elem *{{.Name}}) getConstructorParams(from IMediaObject, options map[strin
 	{{ if len .Constructor.Params }}
 	// Create basic constructor params
 	ret := map[string]interface{} {
-		{{ range .Constructor.Params }}{{ if eq .type "string" "boolean" "int" }}"{{ .name }}" : {{ .defaultValue }},
-			{{ else }}"{{ .name }}" : fmt.Sprintf("%s", from), //elem.getField("{{ .name }}"),
-			{{ end }}{{ end }}
+		{{ range .Constructor.Params }}{{ if eq .type "string" "float64" "boolean" "int" }}"{{ .name }}" : {{ .defaultValue }},
+		{{ else }} "{{ .name }}" : fmt.Sprintf("%s", from),
+		{{ end }}{{ end }}
 	}
 
 	// then merge options
@@ -47,13 +57,13 @@ func (elem *{{.Name}}) getConstructorParams(from IMediaObject, options map[strin
 {{ .Doc }}{{ if .Return.doc }}
 // Returns: 
 {{ .Return.doc }}{{ end }}
-func (elem *{{$name}}) {{ .Name | title }}({{ template "Arguments" .}}) ({{if .Return.type }}{{ .Return.type}}, {{ end }} error) {
+func (elem *{{$name}}) {{ .Name | title }}({{ template "Arguments" .}}) ({{if .Return.type }}{{ .Return.type }}, {{ end }} error) {
 	req := elem.getInvokeRequest()
 	req["params"] = map[string]interface{}{
 		"operation" : "{{ .Name }}",
 		"object"	: elem.Id,{{ if .Params }}
-		"operationParams" : map[string]string{
-			{{ range .Params }} "{{.name }}" : fmt.Sprintf("%s", {{.name}} ),
+		"operationParams" : map[string]interface{}{
+			{{ range .Params }}{{ . | paramValue }},
 			{{ end }}
 		},
 		{{ end }}
@@ -62,7 +72,7 @@ func (elem *{{$name}}) {{ .Name | title }}({{ template "Arguments" .}}) ({{if .R
 	response := <- requestKMS(req)
 	{{ if .Return}}
 	{{ .Return.doc }}
-		{{ if eq .Return.type "string" "int" "float" "boolean" }}
+		{{ if eq .Return.type "string" "int" "float64" "boolean" }}
 	return response.Result["value"], response.Error
 		{{ else }}{{/* More complicated but... let's go */}}
 	ret := {{ .Return.type }}{}
@@ -102,6 +112,8 @@ const packageTemplate = `package kurento
 const DOCLINELENGTH = 79
 
 var re = regexp.MustCompile(`(.+)\[\]`)
+
+var CPXTYPES = make([]string, 0)
 
 type Return struct {
 	Doc  string
@@ -152,6 +164,42 @@ var funcMap = template.FuncMap{
 	// The name "title" is what the function will be called in the template text.
 	"title":     strings.Title,
 	"uppercase": strings.ToUpper,
+	"checkElement": func(p string) string {
+
+		if len(p) > 5 && p[:5] == "Media" {
+			if p[len(p)-4:] != "Type" {
+				return "IMedia" + p[5:]
+			}
+		}
+
+		return p
+	},
+	"paramValue": func(p map[string]interface{}) string {
+		name := p["name"].(string)
+		t := p["type"].(string)
+
+		ctype := false
+		for _, c := range CPXTYPES {
+			if c == t {
+				ctype = true
+				break
+			}
+		}
+
+		switch t {
+		case "float64", "int":
+			return fmt.Sprintf("\"%s\" : %s", name, name)
+		case "string", "boolean":
+			return fmt.Sprintf("\"%s\" : %s", name, name)
+		default:
+			// If param is not complexType, we have getId() method
+			if !ctype && name[0] == 'I' { /* TODO: fix isInterface */
+				return fmt.Sprintf("\"%s\" : %s.getId()", name, name)
+			}
+		}
+		// Default is to set value to param
+		return fmt.Sprintf("\"%s\": %s", name, name)
+	},
 }
 
 func formatDoc(doc string) string {
@@ -190,12 +238,6 @@ func formatDoc(doc string) string {
 }
 
 func formatTypes(p map[string]interface{}) map[string]interface{} {
-	/*doc := strings.Split(p["doc"].(string), "\n")
-	for i, d := range doc {
-		doc[i] = "// " + d
-	}
-	p["doc"] = strings.Join(doc, "\n")
-	*/
 	p["doc"] = formatDoc(p["doc"].(string))
 	if p["type"] == "String[]" {
 		p["type"] = "[]string"
@@ -279,11 +321,6 @@ func parse(c []class) []string {
 				p := formatTypes(p)
 				m.Params[i] = p
 			}
-			//doc := strings.Split(m.Doc, "\n")
-			//for i, d := range doc {
-			//	doc[i] = "// " + d
-			//}
-			//m.Doc = strings.Join(doc, "\n")
 			m.Doc = formatDoc(m.Doc)
 
 			if m.Return["type"] != nil {
@@ -295,17 +332,11 @@ func parse(c []class) []string {
 		}
 		for j, p := range cl.Constructor.Params {
 			p := formatTypes(p)
-			//log.Println(p)
 			cl.Constructor.Params[j] = p
 		}
 
 		tpl, _ := template.New("structure").Funcs(funcMap).Parse(strTemplate)
 		buff := bytes.NewBufferString("")
-		//doc := strings.Split(cl.Doc, "\n")
-		//for i, d := range doc {
-		//	doc[i] = "// " + d
-		//}
-		//cl.Doc = strings.Join(doc, "\n")
 		cl.Doc = formatDoc(cl.Doc)
 
 		tpl.Execute(buff, cl)
@@ -322,11 +353,9 @@ func parseComplexTypes() {
 		ctypes := getModel(path).ComplexTypes
 		for _, ctype := range ctypes {
 
-			// doc := strings.Split(ctype.Doc, "\n")
-			// for i, d := range doc {
-			// 	doc[i] = "// " + d
-			// }
-			// ctype.Doc = strings.Join(doc, "\n")
+			// Add in list
+			CPXTYPES = append(CPXTYPES, ctype.Name)
+
 			ctype.Doc = formatDoc(ctype.Doc)
 
 			for i, p := range ctype.Properties {
@@ -354,6 +383,9 @@ func writeFile(path string, classes []string) {
 }
 
 func main() {
+	// Perpare complexTypes to get the list
+	parseComplexTypes()
+
 	// create base
 	c := getModel(CORE).RemoteClasses
 	coreclasses := parse(c)
@@ -366,8 +398,5 @@ func main() {
 	data, _ := ioutil.ReadFile("kurento_go_base/base.go")
 	// Write data to dst
 	ioutil.WriteFile("kurento/base.go", data, os.ModePerm)
-	/*/
-	//*/
-	parseComplexTypes()
 
 }

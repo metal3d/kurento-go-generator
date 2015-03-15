@@ -2,7 +2,7 @@ package kurento
 
 import (
 	"fmt"
-	L "log"
+	"log"
 
 	"golang.org/x/net/websocket"
 )
@@ -63,7 +63,7 @@ func connect(host string) {
 	var err error
 	ws, err = websocket.Dial(host, "", "http://127.0.0.1")
 	if err != nil {
-		L.Fatal(err)
+		log.Fatal(err)
 	}
 
 	//manage response

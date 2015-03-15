@@ -7,6 +7,14 @@ import (
 
 var T *testing.T
 
+func nicePrint(i interface{}, t *testing.T) {
+	p, err := json.MarshalIndent(i, "", "    ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(string(p))
+}
+
 // change requestKMS for tests
 func init() {
 	requestKMS = func(req map[string]interface{}) <-chan Response {
@@ -35,14 +43,8 @@ func init() {
 		return ret
 	}
 }
-func nicePrint(i interface{}, t *testing.T) {
-	p, err := json.MarshalIndent(i, "", "    ")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Log(string(p))
-}
 
+// Test MediaPipeline creation
 func TestCreateMediaPipeline(t *testing.T) {
 
 	T = t
@@ -51,8 +53,33 @@ func TestCreateMediaPipeline(t *testing.T) {
 	pipeline.Id = "uuid_of_mediapipeline"
 	nicePrint(pipeline, t)
 
+}
+
+// Test WebRTCEndpoint creation
+func TestWebRtcEndpoint(t *testing.T) {
+	T = t
+	debug = true
+	pipeline := NewMediaPipeline()
+	pipeline.Id = "uuid_of_mediapipeline"
+
 	wrtc := &WebRtcEndpoint{}
 	pipeline.Create(wrtc, map[string]interface{}{"test": "val"})
+
+	nicePrint(wrtc, t)
+
+}
+
+//Test to connect sink on webrtc
+func TestConnectWebRTCEndpointSink(t *testing.T) {
+	T = t
+	debug = true
+	pipeline := NewMediaPipeline()
+	pipeline.Id = "uuid_of_mediapipeline"
+
+	wrtc := &WebRtcEndpoint{}
+	pipeline.Create(wrtc, map[string]interface{}{"test": "val"})
+
+	wrtc.Connect(wrtc, "", "", "")
 	nicePrint(wrtc, t)
 
 }

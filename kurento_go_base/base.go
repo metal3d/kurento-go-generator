@@ -1,10 +1,12 @@
 package kurento
 
 import (
-	LOG "log"
+	"log"
 	"reflect"
 	"strings"
 )
+
+var debug = false
 
 // IMadiaElement implements some basic methods as getConstructorParams or Create()
 type IMediaObject interface {
@@ -18,6 +20,9 @@ type IMediaObject interface {
 
 	// Set ID of the element
 	setId(string)
+
+	//Implement Stringer
+	String() string
 }
 
 // Create object "m" with given "options"
@@ -30,8 +35,8 @@ func (elem *MediaObject) Create(m IMediaObject, options map[string]interface{}) 
 		"constructorParams": constparams,
 	}
 	if debug {
-		log("request to be sent: ")
-		log(req)
+		log.Println("request to be sent: ")
+		log.Println(req)
 	}
 	res := <-requestKMS(req)
 	if res.Result["value"] != "" {
@@ -80,14 +85,6 @@ func getMediaElementType(i interface{}) string {
 	n := reflect.TypeOf(i).String()
 	p := strings.Split(n, ".")
 	return p[len(p)-1]
-}
-
-var debug = false
-
-func log(i interface{}) {
-	if debug {
-		LOG.Println(i)
-	}
 }
 
 func mergeOptions(a, b map[string]interface{}) {
