@@ -160,23 +160,26 @@ const (
 	ELEMENTS = "kms-elements/src/server/interface/"
 )
 
-var funcMap = template.FuncMap{
-	// The name "title" is what the function will be called in the template text.
-	"title":     strings.Title,
-	"uppercase": strings.ToUpper,
-	"checkElement": func(p string) string {
-
-		if len(p) > 5 && p[:5] == "Media" {
-			if p[len(p)-4:] != "Type" {
-				return "IMedia" + p[5:]
-			}
+// template func that change MediaXXX to IMediaXXX to
+// be sure to work with interface.
+// Set it global to be used by funcMap["paramValue"] above.
+func tplCheckElement(p string) string {
+	if len(p) > 5 && p[:5] == "Media" {
+		if p[len(p)-4:] != "Type" {
+			return "IMedia" + p[5:]
 		}
+	}
+	return p
+}
 
-		return p
-	},
+var funcMap = template.FuncMap{
+	"title":        strings.Title,
+	"uppercase":    strings.ToUpper,
+	"checkElement": tplCheckElement,
 	"paramValue": func(p map[string]interface{}) string {
 		name := p["name"].(string)
 		t := p["type"].(string)
+		t = tplCheckElement(t)
 
 		ctype := false
 		for _, c := range CPXTYPES {
@@ -192,9 +195,11 @@ var funcMap = template.FuncMap{
 		case "string", "boolean":
 			return fmt.Sprintf("\"%s\" : %s", name, name)
 		default:
-			// If param is not complexType, we have getId() method
-			if !ctype && name[0] == 'I' { /* TODO: fix isInterface */
-				return fmt.Sprintf("\"%s\" : %s.getId()", name, name)
+			log.Println("manage ", name, t)
+			// If param is not complexType, we have Id from String() method
+			if !ctype && t[0] == 'I' { /* TODO: fix isInterface */
+				log.Println("not complex and Interface ", t)
+				return fmt.Sprintf("\"%s\" : fmt.Sprintf(\"%%s\", %s)", name, name)
 			}
 		}
 		// Default is to set value to param
