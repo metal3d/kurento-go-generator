@@ -27,7 +27,7 @@ type I{{ .Name }} interface {
 
 {{ .Doc }}
 type {{ .Name }} struct {
-	{{ .Extends }}
+	{{if eq .Name "MediaObject"}}connection *Connection{{else}}{{ .Extends }}{{end}}
 	{{ range .Properties }}
 	{{ .doc }}
 	{{ .name | title }} {{ .type }}
@@ -59,17 +59,21 @@ func (elem *{{.Name}}) getConstructorParams(from IMediaObject, options map[strin
 {{ .Return.doc }}{{ end }}
 func (elem *{{$name}}) {{ .Name | title }}({{ template "Arguments" .}}) ({{if .Return.type }}{{ .Return.type }}, {{ end }} error) {
 	req := elem.getInvokeRequest()
+	{{ if .Params }}
+	params := make(map[string]interface{})
+	{{ range .Params }}
+	setIfNotEmpty(params, "{{.name}}", {{.name}}){{ end }}
+	{{ end }}
+
 	req["params"] = map[string]interface{}{
 		"operation" : "{{ .Name }}",
 		"object"	: elem.Id,{{ if .Params }}
-		"operationParams" : map[string]interface{}{
-			{{ range .Params }}{{ . | paramValue }},
-			{{ end }}
-		},
+		"operationParams" : params,
 		{{ end }}
 	}
+
 	// Call server and wait response
-	response := <- requestKMS(req)
+	response := <- elem.connection.Request(req)
 	{{ if .Return}}
 	{{ .Return.doc }}
 		{{ if eq .Return.type "string" "int" "float64" "boolean" }}
@@ -172,6 +176,15 @@ func tplCheckElement(p string) string {
 	return p
 }
 
+func isComplexType(t string) bool {
+	for _, c := range CPXTYPES {
+		if c == t {
+			return true
+		}
+	}
+	return false
+}
+
 var funcMap = template.FuncMap{
 	"title":        strings.Title,
 	"uppercase":    strings.ToUpper,
@@ -181,29 +194,20 @@ var funcMap = template.FuncMap{
 		t := p["type"].(string)
 		t = tplCheckElement(t)
 
-		ctype := false
-		for _, c := range CPXTYPES {
-			if c == t {
-				ctype = true
-				break
-			}
-		}
-
+		ctype := isComplexType(t)
 		switch t {
 		case "float64", "int":
-			return fmt.Sprintf("\"%s\" : %s", name, name)
+			return fmt.Sprintf("\"%s\" = %s", name, name)
 		case "string", "boolean":
-			return fmt.Sprintf("\"%s\" : %s", name, name)
+			return fmt.Sprintf("\"%s\" = %s", name, name)
 		default:
-			log.Println("manage ", name, t)
 			// If param is not complexType, we have Id from String() method
 			if !ctype && t[0] == 'I' { /* TODO: fix isInterface */
-				log.Println("not complex and Interface ", t)
-				return fmt.Sprintf("\"%s\" : fmt.Sprintf(\"%%s\", %s)", name, name)
+				return fmt.Sprintf("\"%s\" = fmt.Sprintf(\"%%s\", %s)", name, name)
 			}
 		}
 		// Default is to set value to param
-		return fmt.Sprintf("\"%s\": %s", name, name)
+		return fmt.Sprintf("\"%s\" = %s", name, name)
 	},
 }
 
@@ -312,9 +316,18 @@ func parse(c []class) []string {
 			default:
 				if _, ok := p["type"].(string); ok {
 					if p["type"].(string)[:2] == "[]" {
-						p["type"] = "[]*" + p["type"].(string)[2:]
+						t := p["type"].(string)[2:]
+						if isComplexType(t) {
+							p["type"] = "[]*" + t
+						} else {
+							p["type"] = "[]I" + t
+						}
 					} else {
-						p["type"] = "*" + p["type"].(string)
+						if isComplexType(p["type"].(string)) {
+							p["type"] = "*" + p["type"].(string)
+						} else {
+							p["type"] = "I" + p["type"].(string)
+						}
 					}
 				}
 			}

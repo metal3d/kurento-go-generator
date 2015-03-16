@@ -1,6 +1,7 @@
 package kurento
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 
@@ -27,56 +28,76 @@ type Response struct {
 	Error   Error
 }
 
-// the current websocket connection
-// TODO: manage websocket connection lose
-var ws *websocket.Conn
-
-// client store Response chanels
-var clients = make(map[float64]chan Response)
-var clientId float64
-
-// requesterFunc is a type to be injected in request methods (create, invoke, ...)
-// The requestKMS is that type. The main goal is to allow tests to implement a
-// fake request
-type requesterFunc func(map[string]interface{}) <-chan Response
-
-// requestKMS send a request to server and return the waiting chanel (read only)
-// that contains Response.
-// Note: type of requestKMS is requestFunc
-var requestKMS requesterFunc = func(req map[string]interface{}) <-chan Response {
-	//clientId = len(clients) + 1
-	clientId++
-	req["id"] = clientId
-
-	clients[clientId] = make(chan Response)
-
-	websocket.JSON.Send(ws, req)
-	return clients[clientId]
+type Connection struct {
+	clientId  float64
+	clients   map[float64]chan Response
+	host      string
+	ws        *websocket.Conn
+	SessionId string
 }
 
-// initiate connection to KMS
-func connect(host string) {
-	if ws != nil {
-		// Connection already made
-		return
+var connections = make(map[string]*Connection)
+
+func NewConnection(host string) *Connection {
+	if connections[host] != nil {
+		return connections[host]
 	}
+
+	c := new(Connection)
+	connections[host] = c
+
+	c.clients = make(map[float64]chan Response)
 	var err error
-	ws, err = websocket.Dial(host, "", "http://127.0.0.1")
+	c.ws, err = websocket.Dial(host+"/kurento", "", "http://127.0.0.1")
 	if err != nil {
 		log.Fatal(err)
 	}
+	c.host = host
+	go c.handleResponse()
+	return c
+}
 
-	//manage response
-	go func(ws *websocket.Conn) {
-		for { // run forever
-			r := Response{}
-			websocket.JSON.Receive(ws, &r)
-			// if webscocket client exists, send response to the chanel
-			if clients[r.Id] != nil {
-				clients[r.Id] <- r
-				// chanel is read, we can delete it
-				delete(clients, r.Id)
+func (c *Connection) Create(m IMediaObject, options map[string]interface{}) {
+	elem := &MediaObject{}
+	elem.setConnection(c)
+	elem.Create(m, options)
+}
+
+func (c *Connection) handleResponse() {
+	for { // run forever
+		r := Response{}
+		websocket.JSON.Receive(c.ws, &r)
+		log.Println("response: ", r)
+		if r.Result["sessionId"] != "" {
+			if debug {
+				log.Println("SESSIONID RETURNED")
 			}
+			c.SessionId = r.Result["sessionId"]
 		}
-	}(ws)
+		// if webscocket client exists, send response to the chanel
+		if c.clients[r.Id] != nil {
+			c.clients[r.Id] <- r
+			// chanel is read, we can delete it
+			delete(c.clients, r.Id)
+		} else if debug {
+			log.Println("Dropped message because there is no client ", r.Id)
+			log.Println(r)
+		}
+
+	}
+}
+
+func (c *Connection) Request(req map[string]interface{}) <-chan Response {
+	c.clientId++
+	req["id"] = c.clientId
+	if c.SessionId != "" {
+		req["sesionId"] = c.SessionId
+	}
+	c.clients[c.clientId] = make(chan Response)
+	if debug {
+		j, _ := json.MarshalIndent(req, "", "    ")
+		log.Println("json", string(j))
+	}
+	websocket.JSON.Send(c.ws, req)
+	return c.clients[c.clientId]
 }
