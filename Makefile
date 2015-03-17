@@ -11,6 +11,7 @@ prep:
 build:
 	go run main.go
 	# Because I don't find os.ModeXXX to use when I create files...
+	cp kurento_go_base/README.md kurento/
 	chmod -R a-x kurento/*.go
 
 format:
@@ -19,3 +20,6 @@ format:
 
 test:
 	cd kurento && go test -v
+
+install: all
+	cp -r kurento ..
