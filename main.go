@@ -259,6 +259,9 @@ func formatTypes(p map[string]interface{}) map[string]interface{} {
 	if p["type"] == "float" {
 		p["type"] = "float64"
 	}
+	if p["type"] == "boolean" {
+		p["type"] = "bool"
+	}
 
 	if re.MatchString(p["type"].(string)) {
 		found := re.FindAllStringSubmatch(p["type"].(string), -1)
@@ -269,7 +272,7 @@ func formatTypes(p map[string]interface{}) map[string]interface{} {
 		switch p["type"] {
 		case "string":
 			p["defaultValue"] = `""`
-		case "boolean":
+		case "bool":
 			p["defaultValue"] = "false"
 		case "int", "float64":
 			p["defaultValue"] = "0"
@@ -343,6 +346,7 @@ func parse(c []class) []string {
 
 			if m.Return["type"] != nil {
 				m.Return = formatTypes(m.Return)
+				m.Return["doc"] = formatDoc(m.Return["doc"].(string))
 			}
 
 			cl.Methods[j] = m

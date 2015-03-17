@@ -127,7 +127,11 @@ func setIfNotEmpty(param map[string]interface{}, name string, t interface{}) {
 		if v != 0 {
 			param[name] = v
 		}
-	case IMediaObject:
+	case bool:
+		if v {
+			param[name] = v
+		}
+	case IMediaObject, fmt.Stringer:
 		if v != nil {
 			param[name] = fmt.Sprintf("%s", v)
 		}
