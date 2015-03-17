@@ -10,13 +10,13 @@ import (
 
 // Error that can be filled in response
 type Error struct {
-	Code    float64
+	Code    int64
 	Message string
 	Data    string
 }
 
 // Implements error built-in interface
-func (e Error) Error() string {
+func (e *Error) Error() string {
 	return fmt.Sprintf("[%d] %s %s", e.Code, e.Message, e.Data)
 }
 
@@ -25,7 +25,7 @@ type Response struct {
 	Jsonrpc string
 	Id      float64
 	Result  map[string]string // should change if result has no several form
-	Error   Error             `json:",omitempty"`
+	Error   *Error
 }
 
 type Connection struct {
@@ -67,7 +67,6 @@ func (c *Connection) handleResponse() {
 	for { // run forever
 		r := Response{}
 		websocket.JSON.Receive(c.ws, &r)
-		log.Println("response: ", r)
 		if r.Result["sessionId"] != "" {
 			if debug {
 				log.Println("SESSIONID RETURNED")
