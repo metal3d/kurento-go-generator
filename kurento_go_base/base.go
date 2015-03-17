@@ -9,7 +9,12 @@ import (
 
 var debug = false
 
-// IMadiaElement implements some basic methods as getConstructorParams or Create()
+// Debug activate debug information.
+func Debug(state bool) {
+	debug = state
+}
+
+// IMadiaElement implements some basic methods as getConstructorParams or Create().
 type IMediaObject interface {
 
 	// Return the constructor parameters
@@ -133,7 +138,10 @@ func setIfNotEmpty(param map[string]interface{}, name string, t interface{}) {
 		}
 	case IMediaObject, fmt.Stringer:
 		if v != nil {
-			param[name] = fmt.Sprintf("%s", v)
+			val := fmt.Sprintf("%s", v)
+			if val != "" {
+				param[name] = val
+			}
 		}
 	}
 }
