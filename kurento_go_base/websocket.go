@@ -25,7 +25,7 @@ type Response struct {
 	Jsonrpc string
 	Id      float64
 	Result  map[string]string // should change if result has no several form
-	Error   Error
+	Error   Error             `json:",omitempty"`
 }
 
 type Connection struct {
