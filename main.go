@@ -96,6 +96,12 @@ const complexTypeTemplate = `
 {{ $name := .Name }}
 {{ .Doc }}
 type {{.Name}} string
+
+// Implement fmt.Stringer interface
+func (t {{.Name}}) String() string {
+	return string(t)
+}
+
 const (
 	{{ range .Values }}{{ $name | uppercase }}_{{ . }} {{ $name }} = "{{ . }}" 
 	{{ end}}
